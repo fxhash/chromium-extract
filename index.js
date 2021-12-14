@@ -34,8 +34,10 @@ program
 program.parse(process.argv);
 
 (async () => {
-  try {
+  // global definitions
+  let capture
 
+  try {
     let { cid, mode, delay, resX, resY, selector, features } = program.opts()
   
     // change delay type from string to int
@@ -65,28 +67,85 @@ program.parse(process.argv);
         throw ERRORS.INVALID_PARAMETERS
       }
     }
-  
-    console.log(process.env.PUPPETEER_EXECUTABLE_PATH)
 
-    console.log("test")
-    console.log({ cid, mode, delay, resX, resY, selector, features })
+    // compose the URL from the CID
+    const url = `chrome://gpu`
   
-    console.log("hey browser")
     const browser = await puppeteer.launch({
-      args: [ '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage' ],
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox', 
+        '--disable-dev-shm-usage',
+        '--use-gl=egl'
+      ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
     })
-    console.log("hey page")
-    const page = await browser.newPage()
-    console.log("hey google")
-    await page.goto("https://google.com")
-    console.log("hey title")
-    const title = await page.title()
   
-    console.log(title)
-  
-    await browser.close()
-    fs.writeFileSync("./output.txt", JSON.stringify({ cid, mode, delay, resX, resY, selector, features }))
+    // browse to the page
+    const viewportSettings = {
+      deviceScaleFactor: 1,
+    }
+    if (mode === "VIEWPORT") {
+      viewportSettings.width = resX
+      viewportSettings.height = resY
+    }
+    else {
+      viewportSettings.width = 800
+      viewportSettings.height = 800
+    }
+    let page = await browser.newPage()
+    await page.setViewport(viewportSettings)
+
+    // try to reach the page
+    let response
+    try {
+      response = await page.goto(url, {
+        timeout: 90000,
+        waitUntil: "domcontentloaded"
+      })
+    }
+    catch (err) {
+      if (err && err.name && err.name === "TimeoutError") {
+        throw ERRORS.TIMEOUT
+      }
+      else {
+        throw ERRORS.UNKNOWN
+      }
+    }
+
+    // if the response is not 200 (success), we want to throw
+    if (response.status() !== 200) {
+      throw ERRORS.HTTP_ERROR
+    }
+
+    // wait for the time provided by the user
+    await sleep(delay)
+
+    try {
+      // based on the capture mode use different capture strategies
+      if (mode === "VIEWPORT") {
+        // we simply take a capture of the viewport
+        capture = await page.screenshot()
+      }
+      else if (mode === "CANVAS") {
+        const base64 = await page.$eval(canvasSelector, (el) => {
+          if (!el || el.tagName !== "CANVAS") return null
+          return el.toDataURL()
+        })
+        if (!base64) throw null
+        const pureBase64 = base64.replace(/^data:image\/png;base64,/, "")
+        capture = Buffer.from(pureBase64, "base64")
+      }
+    }
+    catch {
+      throw ERRORS.CANVAS_CAPTURE_FAILED
+    }
+
+    browser.close()
+
+
+    fs.writeFileSync("/parent/test.png", capture)
   }
   catch (error) {
     throw error
