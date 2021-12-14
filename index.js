@@ -76,8 +76,7 @@ program.parse(process.argv);
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox', 
-        '--disable-dev-shm-usage',
-        '--use-gl=egl'
+        '--disable-dev-shm-usage'
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
     })
