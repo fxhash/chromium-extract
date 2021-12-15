@@ -1,6 +1,7 @@
 const { Command } = require("commander")
 const fs = require("fs")
 const puppeteer = require("puppeteer-core")
+const sharp = require("sharp")
 
 
 // DEFINITIONS
@@ -10,18 +11,41 @@ const sleep = (time) => new Promise(resolve => {
 })
 // possible output errors
 const ERRORS = {
-  UNKNOWN:                "UNKNOWN",
-  HTTP_ERROR:             "HTTP_ERROR",
-  INVALID_MODE:           "INVALID_MODE",
-  MISSING_PARAMETERS:     "MISSING_PARAMETERS",
-  INVALID_PARAMETERS:     "INVALID_PARAMETERS",
-  UNSUPPORTED_URL:        "UNSUPPORTED_URL",
-  CANVAS_CAPTURE_FAILED:  "CANVAS_CAPTURE_FAILED",
-  TIMEOUT:                "TIMEOUT",
+  UNKNOWN:                    "UNKNOWN",
+  HTTP_ERROR:                 "HTTP_ERROR",
+  INVALID_MODE:               "INVALID_MODE",
+  MISSING_PARAMETERS:         "MISSING_PARAMETERS",
+  INVALID_PARAMETERS:         "INVALID_PARAMETERS",
+  UNSUPPORTED_URL:            "UNSUPPORTED_URL",
+  CANVAS_CAPTURE_FAILED:      "CANVAS_CAPTURE_FAILED",
+  TIMEOUT:                    "TIMEOUT",
+  EXTRACT_FEATURES_FAILED:    "EXTRACT_FEATURES_FAILED"
 }
 
-const program = new Command()
+// process the raw features extracted into attributes
+function processRawTokenFeatures(rawFeatures) {
+  const features = []
+  // first check if features are an object
+  if (typeof rawFeatures !== "object" || Array.isArray(rawFeatures) || !rawFeatures) {
+    throw null
+  }
+  // go through each property and process it
+  for (const name in rawFeatures) {
+    // chack if propery is accepted type
+    if (!(typeof rawFeatures[name] === "boolean" || typeof rawFeatures[name] === "string" || typeof rawFeatures[name] === "number")) {
+      continue
+    }
+    // all good, the feature can be added safely
+    features.push({
+      name,
+      value: rawFeatures[name]
+    })
+  }
+  return features
+}
 
+// process the command line arguments
+const program = new Command()
 program
   .requiredOption('--cid <cid>', 'The CID of the resource to fetch')
   .requiredOption('--mode <mode>', 'The mode of the capture')
@@ -35,7 +59,8 @@ program.parse(process.argv);
 
 (async () => {
   // global definitions
-  let capture
+  let capture,
+      features = []
 
   try {
     let { cid, mode, delay, resX, resY, selector, features } = program.opts()
@@ -138,15 +163,48 @@ program.parse(process.argv);
         const pureBase64 = base64.replace(/^data:image\/png;base64,/, "")
         capture = Buffer.from(pureBase64, "base64")
       }
+
+      // if the capture is too big, we want to reduce its size
+      if (capture.byteLength > 10*1024*1024) {
+        capture = await sharp(capture)
+          .resize(1024, 1024, { fit: "inside" })
+          .jpeg({ quality: 100 })
+          .toBuffer()
+      }
     }
     catch(err) {
       throw ERRORS.CANVAS_CAPTURE_FAILED
     }
 
+
+    // EXTRACT FEATURES
+    // find $fxhashFeatures in the window object
+    let rawFeatures = null
+    try {
+      const extractedFeatures = await page.evaluate(
+        () => JSON.stringify(window.$fxhashFeatures)
+      )
+      rawFeatures = (extractedFeatures && JSON.parse(extractedFeatures)) || null
+    }
+    catch {
+      throw ERRORS.EXTRACT_FEATURES_FAILED
+    }
+    
+    // turn raw features into attributed
+    try {
+      features = processRawTokenFeatures(rawFeatures)
+    }
+    catch {}
+
+    // if features are still undefined, we assume that there are none
+    features = features || []
+
+    // call for the close of the browser, but don't wait for it
     browser.close()
 
-
+    // todo: save the settings to AWS, under a defined directory where CID is the key
     fs.writeFileSync("/parent/test.png", capture)
+    fs.writeFileSync("/parent/features.txt", JSON.stringify(features))
   }
   catch (error) {
     throw error

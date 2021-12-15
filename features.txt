@@ -1,0 +1,1 @@
+[{"name":"Palette","value":"Chroma"},{"name":"Size","value":0.5294378701597453},{"name":"Rotation","value":7.990347121412964},{"name":"Frequency","value":6}]
