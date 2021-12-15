@@ -69,14 +69,16 @@ program.parse(process.argv);
     }
 
     // compose the URL from the CID
-    const url = `chrome://gpu`
+    // const url = `chrome://gpu`
+    const url = `https://ipfs.io/ipfs/${cid}`
   
     const browser = await puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox', 
-        '--disable-dev-shm-usage'
+        '--disable-dev-shm-usage',
+        '--use-angle=gl-egl'
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
     })
@@ -128,7 +130,7 @@ program.parse(process.argv);
         capture = await page.screenshot()
       }
       else if (mode === "CANVAS") {
-        const base64 = await page.$eval(canvasSelector, (el) => {
+        const base64 = await page.$eval(selector, (el) => {
           if (!el || el.tagName !== "CANVAS") return null
           return el.toDataURL()
         })
@@ -137,7 +139,7 @@ program.parse(process.argv);
         capture = Buffer.from(pureBase64, "base64")
       }
     }
-    catch {
+    catch(err) {
       throw ERRORS.CANVAS_CAPTURE_FAILED
     }
 

@@ -1,4 +1,4 @@
-FROM nvidia/opengl:base-ubuntu20.04
+FROM nvidia/opengl:1.2-glvnd-runtime-ubuntu20.04
 
 # install curl as we need it to get latest nodejs package
 RUN apt-get update
@@ -40,5 +40,5 @@ RUN yarn install
 COPY . .
 
 # FAILS
-# CMD [ "node", "index.js", "--cid", "QmSCdcydNEvsJXf6oeggASxe6FsgdxHBZWgnWKYDNJK9Tr", "--mode", "CANVAS", "--delay", "120000", "--selector", "canvas#defaultCanvas0" ]
-CMD [ "node", "index.js", "--cid", "QmR6tgYH24GhebBaNp3xwA6Lvb2HFkVaLt7os2sZjCFJQA", "--mode", "VIEWPORT", "--delay", "2000", "--resX", "700", "--resY", "2000" ]
+CMD [ "node", "index.js", "--cid", "QmSCdcydNEvsJXf6oeggASxe6FsgdxHBZWgnWKYDNJK9Tr", "--mode", "CANVAS", "--delay", "40000", "--selector", "canvas#defaultCanvas0" ]
+# CMD [ "node", "index.js", "--cid", "QmR6tgYH24GhebBaNp3xwA6Lvb2HFkVaLt7os2sZjCFJQA", "--mode", "VIEWPORT", "--delay", "2000", "--resX", "700", "--resY", "700" ]
