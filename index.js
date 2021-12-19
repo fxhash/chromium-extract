@@ -70,7 +70,7 @@ program.parse(process.argv);
   
     // parameters check
     // check if mode is allowed
-    if (!["CANVAS", "VIEWPORT", "CUSTOM".includes(mode)]) {
+    if (!["CANVAS", "VIEWPORT", "CUSTOM"].includes(mode)) {
       throw ERRORS.INVALID_MODE
     }
     // check parameters correct based on mode
