@@ -2,6 +2,7 @@ const { Command } = require("commander")
 const fs = require("fs")
 const puppeteer = require("puppeteer-core")
 const sharp = require("sharp")
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3")
 
 
 //
@@ -120,6 +121,7 @@ program.parse(process.argv)
 ;(async () => {
   // global definitions
   let capture,
+      captureMime,
       features = []
 
   try {
@@ -220,6 +222,7 @@ program.parse(process.argv)
         await waitPreview(triggerMode, page, delay)
         // we simply take a capture of the viewport
         capture = await page.screenshot()
+        captureMime = "image/png"
       }
       else if (mode === "CANVAS") {
         await waitPreview(triggerMode, page, delay)
@@ -231,6 +234,7 @@ program.parse(process.argv)
         if (!base64) throw null
         const pureBase64 = base64.replace(/^data:image\/png;base64,/, "")
         capture = Buffer.from(pureBase64, "base64")
+        captureMime = "image/png"
       }
 
       // if the capture is too big, we want to reduce its size
@@ -239,6 +243,7 @@ program.parse(process.argv)
           .resize(1024, 1024, { fit: "inside" })
           .jpeg({ quality: 100 })
           .toBuffer()
+        captureMime = "image/jpeg"
       }
     }
     catch(err) {
@@ -271,9 +276,37 @@ program.parse(process.argv)
     // call for the close of the browser, but don't wait for it
     browser.close()
 
+    // create the S3 client
+    const client = new S3Client({
+      region: process.env.AWS_S3_REGION,
+    })
+
+    // the base key path
+    const baseKey = cid
+
+    const capturePutCommand = new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: `${baseKey}/preview.png`,
+      Body: capture,
+      ContentType: captureMime,
+    })
+    
+    let res1 = await client.send(capturePutCommand)
+    console.log(res1)
+    
+    const featuresPutCommand = new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: `${baseKey}/features.json`,
+      Body: JSON.stringify(features),
+      ContentType: "application/json",
+    })
+
+    let res2 = await client.send(featuresPutCommand)
+    console.log(res2) 
+
     // todo: save the settings to AWS, under a defined directory where CID is the key
-    fs.writeFileSync("/parent/test.png", capture)
-    fs.writeFileSync("/parent/features.txt", JSON.stringify(features))
+    // fs.writeFileSync("/parent/test.png", capture)
+    // fs.writeFileSync("/parent/features.txt", JSON.stringify(features))
   }
   catch (error) {
     throw error

@@ -9,4 +9,9 @@
 * implement sending jobs with the proxy
 * make some tests with the proxy
 * update the rest of the file-api / front-end to use the new module instead
-  
+
+
+# Environment variables to configure on AWS Batch
+
+* `AWS_S3_REGION`: the region of the bucket
+* `AWS_S3_BUCKET`: the bucket identifier
