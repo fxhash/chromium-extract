@@ -108,7 +108,7 @@ function processRawTokenFeatures(rawFeatures) {
 // process the command line arguments
 const program = new Command()
 program
-  .requiredOption('--cid <cid>', 'The CID of the resource to fetch')
+  .requiredOption('--url <url>', 'The URL of the resource to fetch')
   .requiredOption('--mode <mode>', 'The mode of the capture')
   .option('--trigger <trigger>', 'The trigger mode of the capture (DELAY, FN_TRIGGER)')
   .option('--delay <delay>', 'The delay before the capture is taken')
@@ -125,7 +125,7 @@ program.parse(process.argv)
       features = []
 
   try {
-    let { cid, mode, trigger: triggerMode, delay, resX, resY, selector, features } = program.opts()
+    let { url, mode, trigger: triggerMode, delay, resX, resY, selector, features } = program.opts()
 
     // default parameter for triggerMode
     if (typeof triggerMode === "undefined") {
@@ -137,7 +137,7 @@ program.parse(process.argv)
     //
   
     // general parameters
-    if (!cid || !mode) {
+    if (!url || !mode) {
       throw ERRORS.MISSING_PARAMETERS
     }
     if (!CAPTURE_MODES.includes(mode)) {
@@ -163,10 +163,6 @@ program.parse(process.argv)
         throw ERRORS.INVALID_PARAMETERS
       }
     }
-
-    // compose the URL from the CID
-    // const url = `chrome://gpu`
-    const url = `https://ipfs.io/ipfs/${cid}`
   
     const browser = await puppeteer.launch({
       headless: true,
@@ -280,7 +276,7 @@ program.parse(process.argv)
     })
 
     // the base key path
-    const baseKey = cid
+    const baseKey = url
 
     // upload the preview PNG
     await client.send(new PutObjectCommand({
@@ -288,7 +284,7 @@ program.parse(process.argv)
       Key: `${baseKey}/preview.png`,
       Body: capture,
       ContentType: "image/png",
-    }))
+    }))&
     
     // upload the features object to a JSON file
     await client.send(new PutObjectCommand({
@@ -299,7 +295,7 @@ program.parse(process.argv)
     }))
 
     // it's a success, we write success to cloud watch
-    console.log(`Successfully processed ${cid}`)
+    console.log(`Successfully processed ${url}`)
     process.exit(0)
   }
   catch (error) {
