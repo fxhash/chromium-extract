@@ -121,7 +121,7 @@ program.parse(process.argv)
 ;(async () => {
   // global definitions
   let capture,
-      captureMime,
+      captureName,
       features = []
 
   try {
@@ -222,7 +222,6 @@ program.parse(process.argv)
         await waitPreview(triggerMode, page, delay)
         // we simply take a capture of the viewport
         capture = await page.screenshot()
-        captureMime = "image/png"
       }
       else if (mode === "CANVAS") {
         await waitPreview(triggerMode, page, delay)
@@ -234,17 +233,16 @@ program.parse(process.argv)
         if (!base64) throw null
         const pureBase64 = base64.replace(/^data:image\/png;base64,/, "")
         capture = Buffer.from(pureBase64, "base64")
-        captureMime = "image/png"
       }
 
       // if the capture is too big, we want to reduce its size
-      if (capture.byteLength > 10*1024*1024) {
-        capture = await sharp(capture)
-          .resize(1024, 1024, { fit: "inside" })
-          .jpeg({ quality: 100 })
-          .toBuffer()
-        captureMime = "image/jpeg"
-      }
+      // ! we don't need to reduce the size anymore since S3 is used to store the images
+      // if (capture.byteLength > 10*1024*1024) {
+      //   capture = await sharp(capture)
+      //     .resize(1024, 1024, { fit: "inside" })
+      //     .jpeg({ quality: 100 })
+      //     .toBuffer()
+      // }
     }
     catch(err) {
       throw ERRORS.CANVAS_CAPTURE_FAILED
@@ -284,31 +282,28 @@ program.parse(process.argv)
     // the base key path
     const baseKey = cid
 
-    const capturePutCommand = new PutObjectCommand({
+    // upload the preview PNG
+    await client.send(new PutObjectCommand({
       Bucket: process.env.AWS_S3_BUCKET,
       Key: `${baseKey}/preview.png`,
       Body: capture,
-      ContentType: captureMime,
-    })
+      ContentType: "image/png",
+    }))
     
-    let res1 = await client.send(capturePutCommand)
-    console.log(res1)
-    
-    const featuresPutCommand = new PutObjectCommand({
+    // upload the features object to a JSON file
+    await client.send(new PutObjectCommand({
       Bucket: process.env.AWS_S3_BUCKET,
       Key: `${baseKey}/features.json`,
       Body: JSON.stringify(features),
       ContentType: "application/json",
-    })
+    }))
 
-    let res2 = await client.send(featuresPutCommand)
-    console.log(res2) 
-
-    // todo: save the settings to AWS, under a defined directory where CID is the key
-    // fs.writeFileSync("/parent/test.png", capture)
-    // fs.writeFileSync("/parent/features.txt", JSON.stringify(features))
+    // it's a success, we write success to cloud watch
+    console.log(`Successfully processed ${cid}`)
+    process.exit(0)
   }
   catch (error) {
-    throw error
+    console.error(error)
+    process.exit(1)
   }
 })()
