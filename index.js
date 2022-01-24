@@ -4,22 +4,82 @@ const puppeteer = require("puppeteer-core")
 const sharp = require("sharp")
 
 
+//
 // DEFINITIONS
-// sleep X milliseconds
-const sleep = (time) => new Promise(resolve => {
-  setTimeout(resolve, time)
-})
+//
+
+const DELAY_MIN = 0
+const DELAY_MAX = 300000
+
+// the different capture modes
+const CAPTURE_MODES = [
+  "CANVAS",
+  "VIEWPORT",
+]
+// the different trigger modes
+const TRIGGER_MODES = [
+  "DELAY",
+  "FN_TRIGGER",
+]
 // possible output errors
 const ERRORS = {
   UNKNOWN:                    "UNKNOWN",
   HTTP_ERROR:                 "HTTP_ERROR",
-  INVALID_MODE:               "INVALID_MODE",
   MISSING_PARAMETERS:         "MISSING_PARAMETERS",
+  INVALID_TRIGGER_PARAMETERS: "INVALID_TRIGGER_PARAMETERS",
   INVALID_PARAMETERS:         "INVALID_PARAMETERS",
   UNSUPPORTED_URL:            "UNSUPPORTED_URL",
   CANVAS_CAPTURE_FAILED:      "CANVAS_CAPTURE_FAILED",
   TIMEOUT:                    "TIMEOUT",
-  EXTRACT_FEATURES_FAILED:    "EXTRACT_FEATURES_FAILED"
+  EXTRACT_FEATURES_FAILED:    "EXTRACT_FEATURES_FAILED",
+}
+
+//
+// UTILITY FUNCTIONS
+//
+
+// sleep X milliseconds
+const sleep = (time) => new Promise(resolve => {
+  setTimeout(resolve, time)
+})
+
+// generic function which resolves once the waiting conditions to take a preview
+// are met (delay, programmatic trigger)
+const waitPreview = (triggerMode, page, delay) => new Promise(async (resolve) => {
+  let resolved = false
+  if (triggerMode === "DELAY") {
+    await sleep(delay)
+    resolve()
+  }
+  else if (triggerMode === "FN_TRIGGER") {
+    Promise.race([
+      // add event listener and wait for event to fire before returning
+      page.evaluate(function() {
+        return new Promise(function(resolve, reject) {
+          window.addEventListener("fxhash-preview", function() {
+            resolve() // resolves when the event fires
+          })
+        })
+      }),
+      sleep(DELAY_MAX)
+    ]).then(resolve)
+  }
+})
+
+// given a trigger mode and an optionnal delay, returns true of false depending on the
+// validity of the trigger input settings
+function isTriggerValid(triggerMode, delay) {
+  if (!TRIGGER_MODES.includes(triggerMode)) {
+    return false
+  }
+  if (triggerMode === "DELAY") {
+    // delay must be defined if trigger mode is delay
+    return typeof delay !== undefined && !isNaN(delay) && delay >= DELAY_MIN && delay <= DELAY_MAX
+  }
+  else if (triggerMode === "FN_TRIGGER") {
+    // fn trigger doesn't need any param
+    return true
+  }
 }
 
 // process the raw features extracted into attributes
@@ -50,30 +110,39 @@ program
   .requiredOption('--cid <cid>', 'The CID of the resource to fetch')
   .requiredOption('--mode <mode>', 'The mode of the capture')
   .requiredOption('--delay <delay>', 'The delay before the capture is taken')
+  .option('--trigger <trigger>', 'The trigger mode of the capture (DELAY, FN_TRIGGER)')
   .option('--resX <resX>', 'The width of the viewport, in case of mode VIEWPORT')
   .option('--resY <resY>', 'The height of the viewport, in case of mode VIEWPORT')
   .option('--selector <selector>', 'The CSS selector to target the CANVAS, in case of a capture')
-  .option('--features', 'Should features be extracted as well ?')
 
-program.parse(process.argv);
+program.parse(process.argv)
 
-(async () => {
+;(async () => {
   // global definitions
   let capture,
       features = []
 
   try {
-    let { cid, mode, delay, resX, resY, selector, features } = program.opts()
-  
-    // change delay type from string to int
-    delay = parseInt(delay)
-  
-    // parameters check
-    // check if mode is allowed
-    if (!["CANVAS", "VIEWPORT", "CUSTOM".includes(mode)]) {
-      throw ERRORS.INVALID_MODE
+    let { cid, mode, trigger: triggerMode, delay, resX, resY, selector, features } = program.opts()
+
+    // default parameter for triggerMode
+    if (typeof triggerMode === "undefined") {
+      triggerMode = "DELAY"
     }
-    // check parameters correct based on mode
+  
+    //
+    // Checking parameters validity
+    //
+  
+    // general parameters
+    if (!cid || !mode) {
+      throw ERRORS.MISSING_PARAMETERS
+    }
+    if (!CAPTURE_MODES.includes(mode)) {
+      throw ERRORS.INVALID_PARAMETERS
+    }
+
+    // parameters based on selected mode
     if (mode === "VIEWPORT") {
       if (!resX || !resY) {
         throw ERRORS.MISSING_PARAMETERS
@@ -83,12 +152,12 @@ program.parse(process.argv);
       if (isNaN(resX) || isNaN(resY) || resX < 256 || resX > 2048 || resY < 256 || resY > 2048) {
         throw ERRORS.INVALID_PARAMETERS
       }
-      if (delay < 0 || delay > 40000) {
+      if (delay < DELAY_MIN || delay > DELAY_MAX) {
         throw ERRORS.INVALID_PARAMETERS
       }
     }
     else if (mode === "CANVAS") {
-      if (!selector || isNaN(delay) || delay < 0 || delay > 40000) {
+      if (!selector) {
         throw ERRORS.INVALID_PARAMETERS
       }
     }
@@ -127,7 +196,7 @@ program.parse(process.argv);
     let response
     try {
       response = await page.goto(url, {
-        timeout: 90000,
+        timeout: 200000,
         waitUntil: "domcontentloaded"
       })
     }
@@ -145,16 +214,16 @@ program.parse(process.argv);
       throw ERRORS.HTTP_ERROR
     }
 
-    // wait for the time provided by the user
-    await sleep(delay)
-
     try {
       // based on the capture mode use different capture strategies
       if (mode === "VIEWPORT") {
+        await waitPreview(triggerMode, page, delay)
         // we simply take a capture of the viewport
         capture = await page.screenshot()
       }
       else if (mode === "CANVAS") {
+        await waitPreview(triggerMode, page, delay)
+        // get the base64 image from the CANVAS targetted
         const base64 = await page.$eval(selector, (el) => {
           if (!el || el.tagName !== "CANVAS") return null
           return el.toDataURL()
