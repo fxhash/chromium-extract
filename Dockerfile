@@ -39,8 +39,3 @@ COPY package.json ./
 COPY yarn.lock ./
 RUN yarn install
 COPY . .
-
-# FAILS
-CMD [ "node", "index.js", "--cid", "QmTM4tf3nLnxCwB7TkfyPYQs5owBBGqBgjkNRN3SkoBZFw", "--mode", "VIEWPORT", "--delay", "2000", "--resX", "256", "--resY", "256" ]
-# CMD [ "node", "index.js", "--cid", "QmSCdcydNEvsJXf6oeggASxe6FsgdxHBZWgnWKYDNJK9Tr", "--mode", "CANVAS", "--delay", "40000", "--selector", "canvas#defaultCanvas0" ]
-# CMD [ "node", "index.js", "--cid", "QmR6tgYH24GhebBaNp3xwA6Lvb2HFkVaLt7os2sZjCFJQA", "--mode", "VIEWPORT", "--delay", "2000", "--resX", "700", "--resY", "700" ]
