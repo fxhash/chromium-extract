@@ -276,7 +276,7 @@ program.parse(process.argv)
     })
 
     // the base key path
-    const baseKey = url
+    const baseKey = process.env.AWS_BATCH_JOB_ID
 
     // upload the preview PNG
     await client.send(new PutObjectCommand({
