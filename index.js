@@ -170,7 +170,8 @@ program.parse(process.argv)
         '--no-sandbox',
         '--disable-setuid-sandbox', 
         '--disable-dev-shm-usage',
-        '--use-angle=gl-egl'
+        '--use-angle=gl-egl',
+        '--use-gl=egl'
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
     })
