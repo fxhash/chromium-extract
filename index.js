@@ -24,15 +24,15 @@ const TRIGGER_MODES = [
 ]
 // possible output errors
 const ERRORS = {
-  UNKNOWN:                    "UNKNOWN",
-  HTTP_ERROR:                 "HTTP_ERROR",
-  MISSING_PARAMETERS:         "MISSING_PARAMETERS",
+  UNKNOWN: "UNKNOWN",
+  HTTP_ERROR: "HTTP_ERROR",
+  MISSING_PARAMETERS: "MISSING_PARAMETERS",
   INVALID_TRIGGER_PARAMETERS: "INVALID_TRIGGER_PARAMETERS",
-  INVALID_PARAMETERS:         "INVALID_PARAMETERS",
-  UNSUPPORTED_URL:            "UNSUPPORTED_URL",
-  CANVAS_CAPTURE_FAILED:      "CANVAS_CAPTURE_FAILED",
-  TIMEOUT:                    "TIMEOUT",
-  EXTRACT_FEATURES_FAILED:    "EXTRACT_FEATURES_FAILED",
+  INVALID_PARAMETERS: "INVALID_PARAMETERS",
+  UNSUPPORTED_URL: "UNSUPPORTED_URL",
+  CANVAS_CAPTURE_FAILED: "CANVAS_CAPTURE_FAILED",
+  TIMEOUT: "TIMEOUT",
+  EXTRACT_FEATURES_FAILED: "EXTRACT_FEATURES_FAILED",
 }
 
 //
@@ -55,9 +55,9 @@ const waitPreview = (triggerMode, page, delay) => new Promise(async (resolve) =>
   else if (triggerMode === "FN_TRIGGER") {
     Promise.race([
       // add event listener and wait for event to fire before returning
-      page.evaluate(function() {
-        return new Promise(function(resolve, reject) {
-          window.addEventListener("fxhash-preview", function() {
+      page.evaluate(function () {
+        return new Promise(function (resolve, reject) {
+          window.addEventListener("fxhash-preview", function () {
             resolve() // resolves when the event fires
           })
         })
@@ -118,11 +118,11 @@ program
 
 program.parse(process.argv)
 
-;(async () => {
+const main = async () => {
   // global definitions
   let capture,
-      captureName,
-      features = []
+    captureName,
+    features = []
 
   try {
     let { url, mode, trigger: triggerMode, delay, resX, resY, selector, features } = program.opts()
@@ -131,11 +131,11 @@ program.parse(process.argv)
     if (typeof triggerMode === "undefined") {
       triggerMode = "DELAY"
     }
-  
+
     //
     // Checking parameters validity
     //
-  
+
     // general parameters
     if (!url || !mode) {
       throw ERRORS.MISSING_PARAMETERS
@@ -163,18 +163,18 @@ program.parse(process.argv)
         throw ERRORS.INVALID_PARAMETERS
       }
     }
-  
+
     const browser = await puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
-        '--disable-setuid-sandbox', 
+        '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--use-angle=gl-egl'
+        '--use-gl=egl'
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
     })
-  
+
     // browse to the page
     const viewportSettings = {
       deviceScaleFactor: 1,
@@ -240,7 +240,7 @@ program.parse(process.argv)
       //     .toBuffer()
       // }
     }
-    catch(err) {
+    catch (err) {
       throw ERRORS.CANVAS_CAPTURE_FAILED
     }
 
@@ -257,12 +257,12 @@ program.parse(process.argv)
     catch {
       throw ERRORS.EXTRACT_FEATURES_FAILED
     }
-    
+
     // turn raw features into attributed
     try {
       features = processRawTokenFeatures(rawFeatures)
     }
-    catch {}
+    catch { }
 
     // if features are still undefined, we assume that there are none
     features = features || []
@@ -284,8 +284,8 @@ program.parse(process.argv)
       Key: `${baseKey}/preview.png`,
       Body: capture,
       ContentType: "image/png",
-    }))&
-    
+    }))
+
     // upload the features object to a JSON file
     await client.send(new PutObjectCommand({
       Bucket: process.env.AWS_S3_BUCKET,
@@ -302,4 +302,6 @@ program.parse(process.argv)
     console.error(error)
     process.exit(1)
   }
-})()
+}
+
+main()
