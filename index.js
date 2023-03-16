@@ -252,7 +252,7 @@ const main = async () => {
       const extractedFeatures = await page.evaluate(
         () => {
           // v3 syntax
-          if (window.$fx._features) return JSON.stringify(window.$fx._features)
+          if (window.$fx?._features) return JSON.stringify(window.$fx._features)
           // deprecated syntax
           return JSON.stringify(window.$fxhashFeatures)
         }
