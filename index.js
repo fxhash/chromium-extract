@@ -49,10 +49,12 @@ const sleep = (time) => new Promise(resolve => {
 const waitPreview = (triggerMode, page, delay) => new Promise(async (resolve) => {
   let resolved = false
   if (triggerMode === "DELAY") {
+    console.log("waiting for delay:", delay)
     await sleep(delay)
     resolve()
   }
   else if (triggerMode === "FN_TRIGGER") {
+    console.log("waiting for function trigger...")
     Promise.race([
       // add event listener and wait for event to fire before returning
       page.evaluate(function () {
@@ -127,6 +129,16 @@ const main = async () => {
   try {
     let { url, mode, trigger: triggerMode, delay, resX, resY, selector, features } = program.opts()
 
+    console.log("running capture with params:", {
+      url,
+      mode,
+      resX,
+      resY,
+      triggerMode,
+      delay,
+      selector,
+    })
+
     // default parameter for triggerMode
     if (typeof triggerMode === "undefined") {
       triggerMode = "DELAY"
@@ -164,6 +176,8 @@ const main = async () => {
       }
     }
 
+    console.log("bootstrapping chromium...")
+
     const browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -174,6 +188,8 @@ const main = async () => {
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
     })
+
+    console.log("configuring page...")
 
     // browse to the page
     const viewportSettings = {
@@ -193,10 +209,12 @@ const main = async () => {
     // try to reach the page
     let response
     try {
+      console.log("navigating to: ", url)
       response = await page.goto(url, {
         timeout: 200000,
         waitUntil: "domcontentloaded"
       })
+      console.log(`navigated to URL with response status: ${response.status()}`);
     }
     catch (err) {
       if (err && err.name && err.name === "TimeoutError") {
@@ -221,6 +239,7 @@ const main = async () => {
       }
       else if (mode === "CANVAS") {
         await waitPreview(triggerMode, page, delay)
+        console.log("converting canvas to PNG with selector:", selector)
         // get the base64 image from the CANVAS targetted
         const base64 = await page.$eval(selector, (el) => {
           if (!el || el.tagName !== "CANVAS") return null
@@ -246,6 +265,7 @@ const main = async () => {
 
 
     // EXTRACT FEATURES
+    console.log("extracting features...")
     // find $fxhashFeatures in the window object
     let rawFeatures = null
     try {
@@ -283,6 +303,8 @@ const main = async () => {
     // the base key path
     const baseKey = process.env.AWS_BATCH_JOB_ID
 
+    console.log("uploading capture to S3...");
+
     // upload the preview PNG
     await client.send(new PutObjectCommand({
       Bucket: process.env.AWS_S3_BUCKET,
@@ -298,6 +320,8 @@ const main = async () => {
       Body: JSON.stringify(features),
       ContentType: "application/json",
     }))
+
+    console.log("successfully uploaded capture to S3");
 
     // it's a success, we write success to cloud watch
     console.log(`Successfully processed ${url}`)
