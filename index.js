@@ -217,6 +217,7 @@ const main = async () => {
       console.log(`navigated to URL with response status: ${response.status()}`);
     }
     catch (err) {
+      console.log(err)
       if (err && err.name && err.name === "TimeoutError") {
         throw ERRORS.TIMEOUT
       }
@@ -260,6 +261,7 @@ const main = async () => {
       // }
     }
     catch (err) {
+      console.log(err)
       throw ERRORS.CANVAS_CAPTURE_FAILED
     }
 
