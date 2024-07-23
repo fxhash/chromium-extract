@@ -184,12 +184,25 @@ const main = async () => {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--use-gl=egl'
+        '--use-gl=egl',
+        '--enable-logging'
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
     })
 
     console.log("configuring page...")
+
+    page.on('console', (msg) => {
+      console.log('BROWSER LOG:', msg.text());
+    })
+    
+    page.on('pageerror', (err) => {
+      console.error('Page error:', err.toString());
+    })
+    
+    page.on('warning', (warning) => {
+      console.warn('Page warning:', warning);
+    })
 
     // browse to the page
     const viewportSettings = {
