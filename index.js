@@ -191,19 +191,7 @@ const main = async () => {
     })
 
     console.log("configuring page...")
-
-    page.on('console', (msg) => {
-      console.log('BROWSER LOG:', msg.text());
-    })
     
-    page.on('pageerror', (err) => {
-      console.error('Page error:', err.toString());
-    })
-    
-    page.on('warning', (warning) => {
-      console.warn('Page warning:', warning);
-    })
-
     // browse to the page
     const viewportSettings = {
       deviceScaleFactor: 1,
@@ -218,6 +206,8 @@ const main = async () => {
     }
     let page = await browser.newPage()
     await page.setViewport(viewportSettings)
+
+    page.on('console', msg => console.log('PAGE LOG:', msg.text()))
 
     // try to reach the page
     let response
