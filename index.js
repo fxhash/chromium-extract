@@ -16,12 +16,15 @@ const DELAY_MAX = 300000;
 // GIF specific constants
 const GIF_DEFAULTS = {
   FRAME_COUNT: 30,
-  FRAME_DELAY: 100, // milliseconds between frames
+  CAPTURE_INTERVAL: 100, // milliseconds between capturing frames
+  PLAYBACK_FPS: 10, // default playback speed in frames per second
   QUALITY: 10,
   MIN_FRAMES: 2,
   MAX_FRAMES: 100,
-  MIN_DELAY: 20,
-  MAX_DELAY: 1000,
+  MIN_CAPTURE_INTERVAL: 20,
+  MAX_CAPTURE_INTERVAL: 15000,
+  MIN_FPS: 1,
+  MAX_FPS: 50,
 };
 
 // the different capture modes
@@ -52,7 +55,7 @@ const sleep = (time) =>
     setTimeout(resolve, time);
   });
 
-function validateGifParams(frameCount, frameDelay) {
+function validateGifParams(frameCount, captureInterval, playbackFps) {
   if (
     frameCount < GIF_DEFAULTS.MIN_FRAMES ||
     frameCount > GIF_DEFAULTS.MAX_FRAMES
@@ -60,16 +63,26 @@ function validateGifParams(frameCount, frameDelay) {
     return false;
   }
   if (
-    frameDelay < GIF_DEFAULTS.MIN_DELAY ||
-    frameDelay > GIF_DEFAULTS.MAX_DELAY
+    captureInterval < GIF_DEFAULTS.MIN_CAPTURE_INTERVAL ||
+    captureInterval > GIF_DEFAULTS.MAX_CAPTURE_INTERVAL
+  ) {
+    return false;
+  }
+  if (
+    playbackFps < GIF_DEFAULTS.MIN_FPS ||
+    playbackFps > GIF_DEFAULTS.MAX_FPS
   ) {
     return false;
   }
   return true;
 }
 
-async function captureFramesToGif(frames, width, height, frameDelay) {
+async function captureFramesToGif(frames, width, height, playbackFps) {
   const gif = GIFEncoder();
+  const playbackDelay = Math.round(1000 / playbackFps);
+  console.log(
+    `Creating GIF with playback delay: ${playbackDelay}ms (${playbackFps} FPS)`
+  );
 
   for (const frame of frames) {
     let pngData;
@@ -100,7 +113,7 @@ async function captureFramesToGif(frames, width, height, frameDelay) {
 
     gif.writeFrame(index, width, height, {
       palette,
-      delay: frameDelay,
+      delay: playbackDelay,
     });
   }
 
@@ -133,7 +146,13 @@ const waitPreview = (triggerMode, page, delay) =>
     }
   });
 
-async function captureViewport(page, isGif, frameCount, frameDelay) {
+async function captureViewport(
+  page,
+  isGif,
+  frameCount,
+  captureInterval,
+  playbackFps
+) {
   if (!isGif) {
     return await page.screenshot();
   }
@@ -144,7 +163,7 @@ async function captureViewport(page, isGif, frameCount, frameDelay) {
       encoding: "binary",
     });
     frames.push(frameBuffer);
-    await sleep(frameDelay);
+    await sleep(captureInterval);
   }
 
   const viewport = page.viewport();
@@ -152,11 +171,18 @@ async function captureViewport(page, isGif, frameCount, frameDelay) {
     frames,
     viewport.width,
     viewport.height,
-    frameDelay
+    playbackFps
   );
 }
 
-async function captureCanvas(page, selector, isGif, frameCount, frameDelay) {
+async function captureCanvas(
+  page,
+  selector,
+  isGif,
+  frameCount,
+  captureInterval,
+  playbackFps
+) {
   if (!isGif) {
     console.log("converting canvas to PNG with selector:", selector);
     const base64 = await page.$eval(selector, (el) => {
@@ -176,7 +202,7 @@ async function captureCanvas(page, selector, isGif, frameCount, frameDelay) {
     });
     if (!base64) throw null;
     frames.push(base64);
-    await sleep(frameDelay);
+    await sleep(captureInterval);
   }
 
   const dimensions = await page.$eval(selector, (el) => ({
@@ -188,7 +214,7 @@ async function captureCanvas(page, selector, isGif, frameCount, frameDelay) {
     frames,
     dimensions.width,
     dimensions.height,
-    frameDelay
+    playbackFps
   );
 }
 
@@ -268,7 +294,11 @@ program
   )
   .option("--gif", "Create an animated GIF instead of a static image")
   .option("--frameCount <frameCount>", "Number of frames for GIF")
-  .option("--frameDelay <frameDelay>", "Delay between frames in milliseconds");
+  .option(
+    "--captureInterval <captureInterval>",
+    "Interval between frames for GIF"
+  )
+  .option("--playbackFps <playbackFps>", "Playback speed for GIF");
 
 program.parse(process.argv);
 
@@ -289,7 +319,8 @@ const main = async () => {
       selector,
       gif = false,
       frameCount = GIF_DEFAULTS.FRAME_COUNT,
-      frameDelay = GIF_DEFAULTS.FRAME_DELAY,
+      captureInterval = GIF_DEFAULTS.CAPTURE_INTERVAL,
+      playbackFps = GIF_DEFAULTS.PLAYBACK_FPS,
     } = program.opts();
 
     console.log("running capture with params:", {
@@ -302,7 +333,8 @@ const main = async () => {
       selector,
       gif,
       frameCount,
-      frameDelay,
+      captureInterval,
+      playbackFps,
     });
 
     // default parameter for triggerMode
@@ -323,7 +355,7 @@ const main = async () => {
     }
 
     // validate GIF parameters if GIF mode is enabled
-    if (gif && !validateGifParams(frameCount, frameDelay)) {
+    if (gif && !validateGifParams(frameCount, captureInterval, playbackFps)) {
       throw ERRORS.INVALID_GIF_PARAMETERS;
     }
 
@@ -415,14 +447,21 @@ const main = async () => {
 
       // based on the capture mode use different capture strategies
       if (mode === "VIEWPORT") {
-        capture = await captureViewport(page, gif, frameCount, frameDelay);
+        capture = await captureViewport(
+          page,
+          gif,
+          frameCount,
+          captureInterval,
+          playbackFps
+        );
       } else if (mode === "CANVAS") {
         capture = await captureCanvas(
           page,
           selector,
           gif,
           frameCount,
-          frameDelay
+          captureInterval,
+          playbackFps
         );
       }
     } catch (err) {
