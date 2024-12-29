@@ -5,6 +5,7 @@ const sharp = require("sharp");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const PNG = require("pngjs").PNG;
 const { GIFEncoder, quantize, applyPalette } = require("gifenc");
+const { performance } = require("perf_hooks");
 
 //
 // DEFINITIONS
@@ -158,12 +159,38 @@ async function captureViewport(
   }
 
   const frames = [];
+  let lastCaptureStart = performance.now();
+
   for (let i = 0; i < frameCount; i++) {
+    // Record start time of screenshot operation
+    const captureStart = performance.now();
+
+    // Capture raw pixels
     const frameBuffer = await page.screenshot({
       encoding: "binary",
     });
     frames.push(frameBuffer);
-    await sleep(captureInterval);
+
+    // Calculate how long the capture took
+    const captureDuration = performance.now() - captureStart;
+
+    // Calculate the actual time we need to wait
+    // If capture took longer than interval, we'll skip the wait
+    const adjustedInterval = Math.max(0, captureInterval - captureDuration);
+
+    // Log timing information for debugging
+    console.log(`Frame ${i + 1}/${frameCount}:`, {
+      captureDuration,
+      adjustedInterval,
+      totalFrameTime: performance.now() - lastCaptureStart,
+    });
+
+    if (adjustedInterval > 0) {
+      await sleep(adjustedInterval);
+    }
+
+    // Update last capture time for next iteration
+    lastCaptureStart = performance.now();
   }
 
   const viewport = page.viewport();
@@ -183,39 +210,63 @@ async function captureCanvas(
   captureInterval,
   playbackFps
 ) {
-  if (!isGif) {
-    console.log("converting canvas to PNG with selector:", selector);
-    const base64 = await page.$eval(selector, (el) => {
-      if (!el || el.tagName !== "CANVAS") return null;
-      return el.toDataURL();
-    });
-    if (!base64) throw null;
-    const pureBase64 = base64.replace(/^data:image\/png;base64,/, "");
-    return Buffer.from(pureBase64, "base64");
+  try {
+    if (!isGif) {
+      console.log("converting canvas to PNG with selector:", selector);
+      const base64 = await page.$eval(selector, (el) => {
+        if (!el || el.tagName !== "CANVAS") return null;
+        return el.toDataURL();
+      });
+      if (!base64) throw null;
+      const pureBase64 = base64.replace(/^data:image\/png;base64,/, "");
+      return Buffer.from(pureBase64, "base64");
+    }
+
+    const frames = [];
+    let lastCaptureStart = Date.now();
+
+    for (let i = 0; i < frameCount; i++) {
+      const captureStart = Date.now();
+
+      const base64 = await page.$eval(selector, (el) => {
+        if (!el || el.tagName !== "CANVAS") return null;
+        return el.toDataURL();
+      });
+      if (!base64) throw null;
+      frames.push(base64);
+
+      // Calculate timing adjustments
+      const captureDuration = Date.now() - captureStart;
+      const adjustedInterval = Math.max(0, captureInterval - captureDuration);
+
+      console.log(`Frame ${i + 1}/${frameCount}:`, {
+        captureDuration,
+        adjustedInterval,
+        totalFrameTime: Date.now() - lastCaptureStart,
+      });
+
+      if (adjustedInterval > 0) {
+        await sleep(adjustedInterval);
+      }
+
+      lastCaptureStart = Date.now();
+    }
+
+    const dimensions = await page.$eval(selector, (el) => ({
+      width: el.width,
+      height: el.height,
+    }));
+
+    return await captureFramesToGif(
+      frames,
+      dimensions.width,
+      dimensions.height,
+      playbackFps
+    );
+  } catch (e) {
+    console.error(e);
+    throw ERRORS.CANVAS_CAPTURE_FAILED;
   }
-
-  const frames = [];
-  for (let i = 0; i < frameCount; i++) {
-    const base64 = await page.$eval(selector, (el) => {
-      if (!el || el.tagName !== "CANVAS") return null;
-      return el.toDataURL();
-    });
-    if (!base64) throw null;
-    frames.push(base64);
-    await sleep(captureInterval);
-  }
-
-  const dimensions = await page.$eval(selector, (el) => ({
-    width: el.width,
-    height: el.height,
-  }));
-
-  return await captureFramesToGif(
-    frames,
-    dimensions.width,
-    dimensions.height,
-    playbackFps
-  );
 }
 
 // given a trigger mode and an optionnal delay, returns true of false depending on the
