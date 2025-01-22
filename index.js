@@ -446,6 +446,9 @@ const main = async () => {
         "--disable-dev-shm-usage",
         "--use-gl=egl",
         "--enable-logging",
+        "--enable-unsafe-swiftshader", // Add this for WebGL software fallback
+        "--ignore-gpu-blacklist", // Force GPU acceleration
+        "--disable-gpu-driver-bug-workarounds", // Might help with GPU stalls
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
