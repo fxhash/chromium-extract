@@ -30,9 +30,8 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -f Dockerfile.legacy \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-legacy \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/}-legacy \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:legacy \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/} \
             .
           docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
 
@@ -45,6 +44,5 @@ jobs:
           docker build -f Dockerfile.v132 \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-v132 \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/}-v132 \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:v132.0.6834 \
             .
           docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
