@@ -2,46 +2,72 @@ FROM nvidia/opengl:1.2-glvnd-runtime-ubuntu22.04
 
 # Set noninteractive installation
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Etc/UTC
 
-# install curl for nodejs package
-RUN apt-get update
-RUN apt-get install -y curl wget gnupg
+# Add i386 architecture support
+RUN dpkg --add-architecture i386 && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libxau6 libxau6:i386 \
+    libxdmcp6 libxdmcp6:i386 \
+    libxcb1 libxcb1:i386 \
+    libxext6 libxext6:i386 \
+    libx11-6 libx11-6:i386 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set up NVIDIA environment variables
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=graphics,compat32,utility
+RUN echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
+    echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
+
+# Set library path
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib/i386-linux-gnu:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
+
+# Install OpenGL/GLVND packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglvnd0 libglvnd0:i386 \
+    libgl1 libgl1:i386 \
+    libglx0 libglx0:i386 \
+    libegl1 libegl1:i386 \
+    libgles2 libgles2:i386 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    xorg \
+    xserver-xorg \
+    xvfb \
+    libx11-dev \
+    libxext-dev \
+    wget \
+    gnupg
+
+# Install NodeJS
+RUN curl -sL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh && \
+    bash nodesource_setup.sh && \
+    apt-get install -y nodejs
 
 # Install specific version of Chrome
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable=132.0.6834.* \
-    && apt-mark hold google-chrome-stable
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list && \
+    apt-get update && \
+    apt-get install -y google-chrome-stable=132.0.6834.* && \
+    apt-mark hold google-chrome-stable
 
-# set node source
-RUN curl -sL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh
-RUN bash nodesource_setup.sh
-
-# install dependencies
-RUN DEBIAN_FRONTEND=noninteractive \
-  apt-get install -y \
-  xorg \
-  xserver-xorg \
-  xvfb \
-  libx11-dev \
-  libxext-dev \
-  nodejs
-
+# Install yarn globally
 RUN npm install --global yarn
 
-# tells puppeteer to use the chrome binaries
+# Set Puppeteer to skip download and use installed Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
 
-# instructs the container to have access to all the GPUs
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES all
+# Set final NVIDIA capabilities
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=all
 
-# setup modules & project
+# Setup working directory and project files
 WORKDIR /app
-RUN rm -rf *
 COPY package.json ./
 COPY yarn.lock ./
 RUN yarn install
