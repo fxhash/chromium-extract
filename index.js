@@ -354,6 +354,8 @@ program
 program.parse(process.argv);
 
 const main = async () => {
+  console.log("revision 19");
+
   // global definitions
   let capture,
     captureName,
@@ -446,6 +448,17 @@ const main = async () => {
         "--disable-dev-shm-usage",
         "--use-gl=egl",
         "--enable-logging",
+        // Add these new flags
+        "--disable-gpu-vsync",
+        "--ignore-gpu-blocklist",
+        "--enable-gpu-rasterization",
+        "--enable-zero-copy",
+        "--disable-software-rasterizer",
+        // Force GPU acceleration
+        "--disable-gpu-process-crash-limit",
+        "--force-gpu-rasterization",
+        "--enable-webgl",
+        "--enable-webgl2",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
