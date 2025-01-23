@@ -35,14 +35,14 @@ jobs:
             .
           docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
 
-      - name: Build, tag, and push Chrome v126 image to Amazon ECR
+      - name: Build, tag, and push Chrome v111 image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: fxhash/chromium-extract
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -f Dockerfile.v126 \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-v126 \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/}-v126 \
+          docker build -f Dockerfile.v111 \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-v111 \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/}-v111 \
             .
           docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
