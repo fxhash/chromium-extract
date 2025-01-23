@@ -1,0 +1,47 @@
+FROM nvidia/opengl:1.2-glvnd-runtime-ubuntu20.04
+
+# Set noninteractive installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# install curl for nodejs package
+RUN apt-get update
+RUN apt-get install -y curl wget gnupg
+
+# Install specific version of Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable=120.0.6099.* \
+    && apt-mark hold google-chrome-stable
+
+# set node source
+RUN curl -sL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh
+RUN bash nodesource_setup.sh
+
+# install dependencies
+RUN DEBIAN_FRONTEND=noninteractive \
+  apt-get install -y \
+  xorg \
+  xserver-xorg \
+  xvfb \
+  libx11-dev \
+  libxext-dev \
+  nodejs
+
+RUN npm install --global yarn
+
+# tells puppeteer to use the chrome binaries
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
+
+# instructs the container to have access to all the GPUs
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES all
+
+# setup modules & project
+WORKDIR /app
+RUN rm -rf *
+COPY package.json ./
+COPY yarn.lock ./
+RUN yarn install
+COPY . .
