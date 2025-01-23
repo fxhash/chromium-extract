@@ -538,8 +538,9 @@ const main = async () => {
       rawFeatures =
         (extractedFeatures && JSON.parse(extractedFeatures)) || null;
     } catch (e) {
+      console.log("Failed to extract features:");
       console.log(e);
-      throw ERRORS.EXTRACT_FEATURES_FAILED;
+      // throw ERRORS.EXTRACT_FEATURES_FAILED;
     }
 
     // turn raw features into attributes
