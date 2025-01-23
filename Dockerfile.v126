@@ -8,11 +8,10 @@ RUN apt-get update
 RUN apt-get install -y curl wget gnupg
 
 # Install specific version of Chrome
-RUN wget https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_126.0.6478.98-1_amd64.deb \
-    && apt-get update \
-    && apt-get install -y ./google-chrome-stable_126.0.6478.98-1_amd64.deb \
-    && rm google-chrome-stable_126.0.6478.98-1_amd64.deb \
-    && apt-mark hold google-chrome-stable
+ENV CHROME_VERSION=126.0.6478.98-1
+RUN wget -q https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_amd64.deb
+RUN apt-get -y update
+RUN apt-get install -y ./google-chrome-stable_${CHROME_VERSION}_amd64.deb
 
 # set node source
 RUN curl -sL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh
