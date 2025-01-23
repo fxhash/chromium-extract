@@ -354,7 +354,7 @@ program
 program.parse(process.argv);
 
 const main = async () => {
-  console.log("revision 21");
+  console.log("revision 23");
 
   // global definitions
   let capture,
@@ -449,6 +449,7 @@ const main = async () => {
         "--enable-logging",
         "--use-gl=angle",
         "--use-angle=gl-egl",
+        "--use-cmd-decoder=passthrough",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
