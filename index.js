@@ -537,7 +537,8 @@ const main = async () => {
       });
       rawFeatures =
         (extractedFeatures && JSON.parse(extractedFeatures)) || null;
-    } catch {
+    } catch (e) {
+      console.log(e);
       throw ERRORS.EXTRACT_FEATURES_FAILED;
     }
 
