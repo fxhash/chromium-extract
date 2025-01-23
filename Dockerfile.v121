@@ -9,7 +9,7 @@ RUN apt-get install -y curl wget gnupg
 
 # Install specific version of Chrome
 # https://www.ubuntuupdates.org/package/google_chrome/stable/main/base/google-chrome-stable
-ENV CHROME_VERSION=111.0.5563.146-1
+ENV CHROME_VERSION=121.0.6167.85-1
 RUN wget -q https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_amd64.deb
 RUN apt-get -y update
 RUN apt-get install -y ./google-chrome-stable_${CHROME_VERSION}_amd64.deb
