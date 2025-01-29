@@ -5,25 +5,44 @@ on:
     branches:
       - dev
       - main
+
 jobs:
   build_chromium_extract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-      - name: Build, tag, and push image to Amazon ECR
+
+      - name: Build, tag, and push legacy image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: fxhash/chromium-extract
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -f Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/} .
+          docker build -f Dockerfile.legacy \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/} \
+            .
+          docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY
+
+      - name: Build, tag, and push Chrome v132 image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: fxhash/chromium-extract
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f Dockerfile.v132 \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG-v132 \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_REF##*/}-v132 \
+            .
           docker push --all-tags $ECR_REGISTRY/$ECR_REPOSITORY

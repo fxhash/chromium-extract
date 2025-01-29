@@ -444,8 +444,10 @@ const main = async () => {
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
-        "--use-gl=egl",
         "--enable-logging",
+        "--use-gl=angle",
+        "--use-angle=gl-egl",
+        "--use-cmd-decoder=passthrough",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
@@ -533,8 +535,10 @@ const main = async () => {
       });
       rawFeatures =
         (extractedFeatures && JSON.parse(extractedFeatures)) || null;
-    } catch {
-      throw ERRORS.EXTRACT_FEATURES_FAILED;
+    } catch (e) {
+      console.log("Failed to extract features:");
+      console.log(e);
+      // throw ERRORS.EXTRACT_FEATURES_FAILED;
     }
 
     // turn raw features into attributes
