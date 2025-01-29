@@ -354,8 +354,6 @@ program
 program.parse(process.argv);
 
 const main = async () => {
-  console.log("revision 23");
-
   // global definitions
   let capture,
     captureName,
