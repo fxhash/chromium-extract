@@ -269,6 +269,27 @@ async function captureCanvas(
   }
 }
 
+const resizeCanvas = async (image, resX, resY) => {
+  const sharpImage = sharp(image);
+
+  /**
+   * TODO: we should eventually get the canvas width/height from the page context
+   * when running captureCanvas() - can bypass sharp if the image is small enough
+   */
+  // get current image dimensions to check if resize is needed
+  const metadata = await sharpImage.metadata();
+  const currentWidth = metadata.width;
+  const currentHeight = metadata.height;
+
+  // check if current resolution is already <= target resolution
+  if (currentWidth <= resX && currentHeight <= resY) {
+    // no resize needed, return original image
+    return image;
+  }
+
+  return sharpImage.resize(resX, resY, { fit: "inside" }).toBuffer();
+};
+
 // given a trigger mode and an optionnal delay, returns true of false depending on the
 // validity of the trigger input settings
 function isTriggerValid(triggerMode, delay) {
@@ -320,6 +341,40 @@ function processRawTokenFeatures(rawFeatures) {
   }
   return features;
 }
+
+const performCapture = async (
+  mode,
+  page,
+  canvasSelector,
+  resX,
+  resY,
+  gif,
+  frameCount,
+  captureInterval,
+  playbackFps
+) => {
+  console.log("performing capture...");
+
+  // if viewport mode, use the native puppeteer page.screenshot
+  if (mode === "VIEWPORT") {
+    // we simply take a capture of the viewport
+    return captureViewport(page, gif, frameCount, captureInterval, playbackFps);
+  }
+  // if the mode is canvas, we need to execute som JS on the client to select
+  // the canvas and generate a dataURL to bridge it in here
+  else if (mode === "CANVAS") {
+    const canvas = await captureCanvas(
+      page,
+      canvasSelector,
+      gif,
+      frameCount,
+      captureInterval,
+      playbackFps
+    );
+    if (resX && resY) return resizeCanvas(canvas, resX, resY);
+    return canvas;
+  }
+};
 
 // process the command line arguments
 const program = new Command();
@@ -497,26 +552,17 @@ const main = async () => {
 
     try {
       await waitPreview(triggerMode, page, delay);
-
-      // based on the capture mode use different capture strategies
-      if (mode === "VIEWPORT") {
-        capture = await captureViewport(
-          page,
-          gif,
-          frameCount,
-          captureInterval,
-          playbackFps
-        );
-      } else if (mode === "CANVAS") {
-        capture = await captureCanvas(
-          page,
-          selector,
-          gif,
-          frameCount,
-          captureInterval,
-          playbackFps
-        );
-      }
+      capture = await performCapture(
+        mode,
+        page,
+        selector,
+        resX,
+        resY,
+        gif,
+        frameCount,
+        captureInterval,
+        playbackFps
+      );
     } catch (err) {
       console.log(err);
       throw ERRORS.CANVAS_CAPTURE_FAILED;
