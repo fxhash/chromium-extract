@@ -465,13 +465,14 @@ const main = async () => {
       throw ERRORS.INVALID_GIF_PARAMETERS;
     }
 
+    if (resX) resX = Math.round(resX);
+    if (resY) resY = Math.round(resY);
+
     // parameters based on selected mode
     if (mode === "VIEWPORT") {
       if (!resX || !resY) {
         throw ERRORS.MISSING_PARAMETERS;
       }
-      resX = Math.round(resX);
-      resY = Math.round(resY);
       if (
         isNaN(resX) ||
         isNaN(resY) ||
