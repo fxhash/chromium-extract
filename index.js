@@ -31,7 +31,7 @@ const GIF_DEFAULTS = {
 // the different capture modes
 const CAPTURE_MODES = ["CANVAS", "VIEWPORT"];
 // the different trigger modes
-const TRIGGER_MODES = ["DELAY", "FN_TRIGGER"];
+const TRIGGER_MODES = ["DELAY", "FN_TRIGGER", "FN_TRIGGER_GIF"];
 // possible output errors
 const ERRORS = {
   UNKNOWN: "UNKNOWN",
@@ -126,7 +126,6 @@ async function captureFramesToGif(frames, width, height, playbackFps) {
 // are met (delay, programmatic trigger)
 const waitPreview = (triggerMode, page, delay) =>
   new Promise(async (resolve) => {
-    let resolved = false;
     if (triggerMode === "DELAY") {
       console.log("waiting for delay:", delay);
       await sleep(delay);
@@ -147,17 +146,11 @@ const waitPreview = (triggerMode, page, delay) =>
     }
   });
 
-async function captureViewport(
-  page,
-  isGif,
+async function captureFramesWithTiming(
+  captureFrameFunction,
   frameCount,
-  captureInterval,
-  playbackFps
+  captureInterval
 ) {
-  if (!isGif) {
-    return await page.screenshot();
-  }
-
   const frames = [];
   let lastCaptureStart = performance.now();
 
@@ -165,11 +158,9 @@ async function captureViewport(
     // Record start time of screenshot operation
     const captureStart = performance.now();
 
-    // Capture raw pixels
-    const frameBuffer = await page.screenshot({
-      encoding: "binary",
-    });
-    frames.push(frameBuffer);
+    // Use the provided capture function to get the frame
+    const frame = await captureFrameFunction();
+    frames.push(frame);
 
     // Calculate how long the capture took
     const captureDuration = performance.now() - captureStart;
@@ -193,6 +184,81 @@ async function captureViewport(
     lastCaptureStart = performance.now();
   }
 
+  return frames;
+}
+
+async function captureFramesProgrammatically(page, captureFrameFunction) {
+  const frames = [];
+
+  // set up the event listener and capture loop
+  await page.exposeFunction("captureFrame", async () => {
+    const frame = await captureFrameFunction();
+    frames.push(frame);
+    return frames.length;
+  });
+
+  // wait for events in browser context
+  await page.evaluate(
+    function (maxFrames, delayMax) {
+      return new Promise(function (resolve) {
+        const handleFrameCapture = async (event) => {
+          const frameCount = await window.captureFrame();
+
+          if (event.detail?.isLastFrame || frameCount >= maxFrames) {
+            window.removeEventListener(
+              "fxhash-capture-frame",
+              handleFrameCapture
+            );
+            resolve();
+          }
+        };
+
+        window.addEventListener("fxhash-capture-frame", handleFrameCapture);
+
+        // timeout fallback
+        setTimeout(() => {
+          window.removeEventListener(
+            "fxhash-capture-frame",
+            handleFrameCapture
+          );
+          resolve();
+        }, delayMax);
+      });
+    },
+    GIF_DEFAULTS.MAX_FRAMES,
+    DELAY_MAX
+  );
+
+  return frames;
+}
+
+async function captureViewport(
+  page,
+  triggerMode,
+  isGif,
+  frameCount,
+  captureInterval,
+  playbackFps
+) {
+  if (!isGif) {
+    return await page.screenshot();
+  }
+
+  const captureViewportFrame = async () => {
+    return await page.screenshot({
+      encoding: "binary",
+    });
+  };
+
+  const frames =
+    triggerMode === "FN_TRIGGER_GIF"
+      ? await captureFramesProgrammatically(page, captureViewportFrame)
+      : await captureFramesWithTiming(
+          captureViewportFrame,
+          frameCount,
+          captureInterval
+        );
+
   const viewport = page.viewport();
   return await captureFramesToGif(
     frames,
@@ -205,6 +271,7 @@ async function captureViewport(
 async function captureCanvas(
   page,
   selector,
+  triggerMode,
   isGif,
   frameCount,
   captureInterval,
@@ -222,35 +289,24 @@ async function captureCanvas(
       return Buffer.from(pureBase64, "base64");
     }
 
-    const frames = [];
-    let lastCaptureStart = Date.now();
-
-    for (let i = 0; i < frameCount; i++) {
-      const captureStart = Date.now();
-
+    const captureCanvasFrame = async () => {
+      // Get raw pixel data from canvas
       const base64 = await page.$eval(selector, (el) => {
         if (!el || el.tagName !== "CANVAS") return null;
         return el.toDataURL();
       });
-      if (!base64) throw null;
-      frames.push(base64);
+      if (!base64) throw new Error("Canvas capture failed");
+      return base64;
+    };
 
-      // Calculate timing adjustments
-      const captureDuration = Date.now() - captureStart;
-      const adjustedInterval = Math.max(0, captureInterval - captureDuration);
-
-      console.log(`Frame ${i + 1}/${frameCount}:`, {
-        captureDuration,
-        adjustedInterval,
-        totalFrameTime: Date.now() - lastCaptureStart,
-      });
-
-      if (adjustedInterval > 0) {
-        await sleep(adjustedInterval);
-      }
-
-      lastCaptureStart = Date.now();
-    }
+    const frames =
+      triggerMode === "FN_TRIGGER_GIF"
+        ? await captureFramesProgrammatically(page, captureCanvasFrame)
+        : await captureFramesWithTiming(
+            captureCanvasFrame,
+            frameCount,
+            captureInterval
+          );
 
     const dimensions = await page.$eval(selector, (el) => ({
       width: el.width,
@@ -290,9 +346,9 @@ const resizeCanvas = async (image, resX, resY) => {
   return sharpImage.resize(resX, resY, { fit: "inside" }).toBuffer();
 };
 
-// given a trigger mode and an optionnal delay, returns true of false depending on the
+// given a trigger mode and an optional delay, returns true or false depending on the
 // validity of the trigger input settings
-function isTriggerValid(triggerMode, delay) {
+function isTriggerValid(triggerMode, delay, playbackFps) {
   if (!TRIGGER_MODES.includes(triggerMode)) {
     return false;
   }
@@ -303,6 +359,13 @@ function isTriggerValid(triggerMode, delay) {
       !isNaN(delay) &&
       delay >= DELAY_MIN &&
       delay <= DELAY_MAX
+    );
+  } else if (triggerMode === "FN_TRIGGER_GIF") {
+    return (
+      typeof playbackFps !== undefined &&
+      !isNaN(playbackFps) &&
+      playbackFps >= GIF_DEFAULTS.MIN_FPS &&
+      playbackFps <= GIF_DEFAULTS.MAX_FPS
     );
   } else if (triggerMode === "FN_TRIGGER") {
     // fn trigger doesn't need any param
@@ -323,7 +386,7 @@ function processRawTokenFeatures(rawFeatures) {
   }
   // go through each property and process it
   for (const name in rawFeatures) {
-    // chack if propery is accepted type
+    // check if property is accepted type
     if (
       !(
         typeof rawFeatures[name] === "boolean" ||
@@ -344,6 +407,7 @@ function processRawTokenFeatures(rawFeatures) {
 
 const performCapture = async (
   mode,
+  triggerMode,
   page,
   canvasSelector,
   resX,
@@ -358,14 +422,22 @@ const performCapture = async (
   // if viewport mode, use the native puppeteer page.screenshot
   if (mode === "VIEWPORT") {
     // we simply take a capture of the viewport
-    return captureViewport(page, gif, frameCount, captureInterval, playbackFps);
+    return captureViewport(
+      page,
+      triggerMode,
+      gif,
+      frameCount,
+      captureInterval,
+      playbackFps
+    );
   }
-  // if the mode is canvas, we need to execute som JS on the client to select
+  // if the mode is canvas, we need to execute some JS on the client to select
   // the canvas and generate a dataURL to bridge it in here
   else if (mode === "CANVAS") {
     const canvas = await captureCanvas(
       page,
       canvasSelector,
+      triggerMode,
       gif,
       frameCount,
       captureInterval,
@@ -383,7 +455,7 @@ program
   .requiredOption("--mode <mode>", "The mode of the capture")
   .option(
     "--trigger <trigger>",
-    "The trigger mode of the capture (DELAY, FN_TRIGGER)"
+    "The trigger mode of the capture (DELAY, FN_TRIGGER, FN_TRIGGER_GIF)"
   )
   .option("--delay <delay>", "The delay before the capture is taken")
   .option(
@@ -458,6 +530,9 @@ const main = async () => {
     }
     if (!CAPTURE_MODES.includes(mode)) {
       throw ERRORS.INVALID_PARAMETERS;
+    }
+    if (!isTriggerValid(triggerMode, delay, playbackFps)) {
+      throw ERRORS.INVALID_TRIGGER_PARAMETERS;
     }
 
     // validate GIF parameters if GIF mode is enabled
@@ -552,9 +627,17 @@ const main = async () => {
     }
 
     try {
-      await waitPreview(triggerMode, page, delay);
+      if (triggerMode === "FN_TRIGGER_GIF") {
+        // for FN_TRIGGER_GIF mode, skip preview waiting entirely
+        // the capture functions will handle event listening internally
+        console.log("Using FN_TRIGGER_GIF mode - skipping preview wait");
+      } else {
+        await waitPreview(triggerMode, page, delay);
+      }
+
       capture = await performCapture(
         mode,
+        triggerMode,
         page,
         selector,
         resX,
