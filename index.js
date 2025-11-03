@@ -576,9 +576,18 @@ const main = async () => {
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--enable-logging",
-        "--use-gl=angle",
-        "--use-angle=gl-egl",
-        "--use-cmd-decoder=passthrough",
+        "--use-gl=desktop",
+        // Add these new flags
+        "--disable-gpu-vsync",
+        "--ignore-gpu-blocklist",
+        "--enable-gpu-rasterization",
+        "--enable-zero-copy",
+        "--disable-software-rasterizer",
+        // Force GPU acceleration
+        "--disable-gpu-process-crash-limit",
+        "--force-gpu-rasterization",
+        "--enable-webgl",
+        "--enable-webgl2",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
