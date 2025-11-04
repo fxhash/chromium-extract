@@ -575,8 +575,8 @@ const main = async () => {
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
-        "--use-gl=egl",
-        "--use-angle=swiftshader", // Software fallback that's T4-compatible
+        "--use-gl=angle",
+        "--use-angle=gl",
         "--enable-logging",
         "--ignore-gpu-blocklist",
         "--enable-webgl",
