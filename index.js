@@ -577,8 +577,12 @@ const main = async () => {
         "--disable-dev-shm-usage",
         "--enable-logging",
         "--use-gl=angle",
-        "--use-angle=gl-egl",
+        "--use-angle=gl",
         "--use-cmd-decoder=passthrough",
+        "--ignore-gpu-blocklist",
+        "--enable-webgl",
+        "--enable-webgl2",
+        "--disable-gpu-driver-bug-workarounds",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
