@@ -575,19 +575,13 @@ const main = async () => {
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
+        "--use-gl=egl",
+        "--use-angle=swiftshader", // Software fallback that's T4-compatible
         "--enable-logging",
-        "--use-gl=desktop",
-        // Add these new flags
-        "--disable-gpu-vsync",
         "--ignore-gpu-blocklist",
-        "--enable-gpu-rasterization",
-        "--enable-zero-copy",
-        "--disable-software-rasterizer",
-        // Force GPU acceleration
-        "--disable-gpu-process-crash-limit",
-        "--force-gpu-rasterization",
         "--enable-webgl",
         "--enable-webgl2",
+        "--disable-gpu-driver-bug-workarounds",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
