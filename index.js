@@ -523,6 +523,7 @@ const main = async () => {
       frameCount,
       captureInterval,
       playbackFps,
+      angleMode,
     });
 
     // default parameter for triggerMode
