@@ -577,7 +577,7 @@ const main = async () => {
         "--disable-dev-shm-usage",
         "--enable-logging",
         "--use-gl=angle",
-        "--use-angle=gl",
+        "--use-angle=gl-egl",
         "--use-cmd-decoder=passthrough",
         "--ignore-gpu-blocklist",
         "--enable-webgl",
