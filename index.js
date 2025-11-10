@@ -28,6 +28,11 @@ const GIF_DEFAULTS = {
   MAX_FPS: 50,
 };
 
+const ANGLE_MODES = {
+  GL: "gl",
+  GL_EGL: "gl-egl",
+};
+
 // the different capture modes
 const CAPTURE_MODES = ["CANVAS", "VIEWPORT"];
 // the different trigger modes
@@ -476,7 +481,11 @@ program
     "--captureInterval <captureInterval>",
     "Interval between frames for GIF"
   )
-  .option("--playbackFps <playbackFps>", "Playback speed for GIF");
+  .option("--playbackFps <playbackFps>", "Playback speed for GIF")
+  .option(
+    "--angleMode <angleMode>",
+    "The angle mode to use for the capture (GL, GL_EGL)"
+  );
 
 program.parse(process.argv);
 
@@ -499,6 +508,7 @@ const main = async () => {
       frameCount = GIF_DEFAULTS.FRAME_COUNT,
       captureInterval = GIF_DEFAULTS.CAPTURE_INTERVAL,
       playbackFps = GIF_DEFAULTS.PLAYBACK_FPS,
+      angleMode = ANGLE_MODES.GL_EGL,
     } = program.opts();
 
     console.log("running capture with params:", {
@@ -577,7 +587,7 @@ const main = async () => {
         "--disable-dev-shm-usage",
         "--enable-logging",
         "--use-gl=angle",
-        "--use-angle=gl",
+        `--use-angle=${angleMode}`,
         "--use-cmd-decoder=passthrough",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
