@@ -493,12 +493,23 @@ program.parse(process.argv);
 
 const main = async () => {
   try {
-    const vulkanLibs = execSync('find /usr -name "*vulkan*.so*" 2>/dev/null', {
-      encoding: "utf-8",
-    });
-    console.log("Vulkan libraries:", vulkanLibs);
+    const hostICD = execSync(
+      'cat /usr/share/vulkan/icd.d/*.json 2>/dev/null || echo "none"',
+      { encoding: "utf-8" }
+    );
+    console.log("Host ICDs:", hostICD);
   } catch (e) {
-    console.error("Vulkan lib search failed");
+    console.error("ICD check failed");
+  }
+
+  try {
+    const nvidiaVk = execSync(
+      'find / -name "*nvidia*" -path "*/vulkan/*" 2>/dev/null | head -20',
+      { encoding: "utf-8" }
+    );
+    console.log("NVIDIA Vulkan files:", nvidiaVk);
+  } catch (e) {
+    console.error("No NVIDIA Vulkan found");
   }
 
   // global definitions
