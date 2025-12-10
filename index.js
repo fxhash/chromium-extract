@@ -7,6 +7,8 @@ const PNG = require("pngjs").PNG;
 const { GIFEncoder, quantize, applyPalette } = require("gifenc");
 const { performance } = require("perf_hooks");
 
+const { execSync } = require("child_process");
+
 //
 // DEFINITIONS
 //
@@ -490,6 +492,15 @@ program
 program.parse(process.argv);
 
 const main = async () => {
+  try {
+    const vulkanCheck = execSync("vulkaninfo --summary", { encoding: "utf-8" });
+    console.log("=== VULKAN CHECK ===");
+    console.log(vulkanCheck);
+    console.log("===================");
+  } catch (e) {
+    console.error("Vulkan check failed:", e.message);
+  }
+
   // global definitions
   let capture,
     captureName,
@@ -669,25 +680,14 @@ const main = async () => {
     }
 
     // TEMP - check if WebGPU is available
-    const adapterInfo = await page.evaluate(async () => {
-      if (!navigator.gpu) return { error: "No GPU API" };
-
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) return { error: "No adapter returned" };
-
-      const info = await adapter.requestAdapterInfo();
-      const limits = adapter.limits;
-
-      return {
-        vendor: info.vendor,
-        architecture: info.architecture,
-        device: info.device,
-        description: info.description,
-        maxTextureDimension2D: limits.maxTextureDimension2D,
-      };
+    const gpuStatus = await page.evaluate(() => {
+      return navigator.userAgent;
     });
+    console.log("User agent:", gpuStatus);
 
-    console.log("WebGPU Adapter Info:", JSON.stringify(adapterInfo, null, 2));
+    await page.goto("chrome://gpu");
+    const gpuInfo = await page.content();
+    console.log("GPU Info:", gpuInfo.substring(0, 2000));
     // ------------------------------------------------------------
 
     // EXTRACT FEATURES
