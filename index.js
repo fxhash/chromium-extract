@@ -492,37 +492,14 @@ program
 program.parse(process.argv);
 
 const main = async () => {
-  // At the start of main(), before launching browser
-  console.log("=== GPU DIAGNOSTICS ===");
-
   try {
-    const nvidiaSmi = execSync("nvidia-smi", { encoding: "utf-8" });
-    console.log("nvidia-smi:", nvidiaSmi);
-  } catch (e) {
-    console.error("nvidia-smi failed:", e.message);
-  }
-
-  try {
-    const libs = execSync('find /usr -name "libGLX_nvidia.so*" 2>/dev/null', {
+    const vulkanLibs = execSync('find /usr -name "*vulkan*.so*" 2>/dev/null', {
       encoding: "utf-8",
     });
-    console.log("NVIDIA GLX libraries found at:", libs);
+    console.log("Vulkan libraries:", vulkanLibs);
   } catch (e) {
-    console.error("Could not find NVIDIA libraries");
+    console.error("Vulkan lib search failed");
   }
-
-  try {
-    const nvidiaLibs = execSync(
-      'ls -la /usr/local/nvidia/lib64/ 2>/dev/null || echo "not found"',
-      { encoding: "utf-8" }
-    );
-    console.log("NVIDIA lib64 contents:", nvidiaLibs);
-  } catch (e) {
-    console.error("NVIDIA lib64 check failed");
-  }
-
-  console.log("VK_ICD_FILENAMES:", process.env.VK_ICD_FILENAMES);
-  console.log("=======================");
 
   // global definitions
   let capture,
