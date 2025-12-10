@@ -593,6 +593,8 @@ const main = async () => {
         // enable webgpu
         "--enable-unsafe-webgpu",
         "--enable-features=Vulkan",
+        "--use-webgpu-adapter=vulkan",
+        "--enable-dawn-features=allow_unsafe_apis",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
@@ -667,10 +669,25 @@ const main = async () => {
     }
 
     // TEMP - check if WebGPU is available
-    const hasWebGPU = await page.evaluate(() => {
-      return "gpu" in navigator;
+    const adapterInfo = await page.evaluate(async () => {
+      if (!navigator.gpu) return { error: "No GPU API" };
+
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) return { error: "No adapter returned" };
+
+      const info = await adapter.requestAdapterInfo();
+      const limits = adapter.limits;
+
+      return {
+        vendor: info.vendor,
+        architecture: info.architecture,
+        device: info.device,
+        description: info.description,
+        maxTextureDimension2D: limits.maxTextureDimension2D,
+      };
     });
-    console.log("WebGPU available:", hasWebGPU);
+
+    console.log("WebGPU Adapter Info:", JSON.stringify(adapterInfo, null, 2));
     // ------------------------------------------------------------
 
     // EXTRACT FEATURES
