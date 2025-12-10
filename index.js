@@ -590,6 +590,9 @@ const main = async () => {
         "--use-gl=angle",
         `--use-angle=${angleMode}`,
         "--use-cmd-decoder=passthrough",
+        // enable webgpu
+        "--enable-unsafe-webgpu",
+        "--enable-features=Vulkan",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
@@ -662,6 +665,13 @@ const main = async () => {
       console.log(err);
       throw ERRORS.CANVAS_CAPTURE_FAILED;
     }
+
+    // TEMP - check if WebGPU is available
+    const hasWebGPU = await page.evaluate(() => {
+      return "gpu" in navigator;
+    });
+    console.log("WebGPU available:", hasWebGPU);
+    // ------------------------------------------------------------
 
     // EXTRACT FEATURES
     console.log("extracting features...");

@@ -16,6 +16,10 @@ RUN wget -q https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-sta
     apt-mark hold google-chrome-stable && \
     rm google-chrome.deb
 
+RUN apt-get install -y \
+    libvulkan1 \
+    vulkan-tools
+
 # set node source
 RUN curl -sL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh
 RUN bash nodesource_setup.sh
