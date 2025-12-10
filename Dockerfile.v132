@@ -18,7 +18,8 @@ RUN wget -q https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-sta
 
 RUN apt-get install -y \
     libvulkan1 \
-    vulkan-tools
+    vulkan-tools \
+    nvidia-vulkan-icd 
 
 # set node source
 RUN curl -sL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh
