@@ -493,24 +493,12 @@ program.parse(process.argv);
 
 const main = async () => {
   try {
-    const hostICD = execSync(
-      'cat /usr/share/vulkan/icd.d/*.json 2>/dev/null || echo "none"',
+    const nvidiaVulkan = execSync(
+      'find /usr -name "*nvidia*vulkan*" -o -name "*vk_swiftshader*" 2>/dev/null',
       { encoding: "utf-8" }
     );
-    console.log("Host ICDs:", hostICD);
-  } catch (e) {
-    console.error("ICD check failed");
-  }
-
-  try {
-    const nvidiaVk = execSync(
-      'find / -name "*nvidia*" -path "*/vulkan/*" 2>/dev/null | head -20',
-      { encoding: "utf-8" }
-    );
-    console.log("NVIDIA Vulkan files:", nvidiaVk);
-  } catch (e) {
-    console.error("No NVIDIA Vulkan found");
-  }
+    console.log("NVIDIA Vulkan search:", nvidiaVulkan);
+  } catch (e) {}
 
   // global definitions
   let capture,
