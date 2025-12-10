@@ -590,6 +590,9 @@ const main = async () => {
         "--use-gl=angle",
         `--use-angle=${angleMode}`,
         "--use-cmd-decoder=passthrough",
+        // enable webgpu
+        "--enable-unsafe-webgpu",
+        "--use-webgpu-adapter=opengles",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
