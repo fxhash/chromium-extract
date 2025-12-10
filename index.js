@@ -7,8 +7,6 @@ const PNG = require("pngjs").PNG;
 const { GIFEncoder, quantize, applyPalette } = require("gifenc");
 const { performance } = require("perf_hooks");
 
-const { execSync } = require("child_process");
-
 //
 // DEFINITIONS
 //
@@ -492,14 +490,6 @@ program
 program.parse(process.argv);
 
 const main = async () => {
-  try {
-    const nvidiaVulkan = execSync(
-      'find /usr -name "*nvidia*vulkan*" -o -name "*vk_swiftshader*" 2>/dev/null',
-      { encoding: "utf-8" }
-    );
-    console.log("NVIDIA Vulkan search:", nvidiaVulkan);
-  } catch (e) {}
-
   // global definitions
   let capture,
     captureName,
@@ -602,9 +592,7 @@ const main = async () => {
         "--use-cmd-decoder=passthrough",
         // enable webgpu
         "--enable-unsafe-webgpu",
-        "--enable-features=Vulkan",
-        "--use-webgpu-adapter=vulkan",
-        "--enable-dawn-features=allow_unsafe_apis",
+        "--use-webgpu-adapter=opengles",
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
     });
@@ -677,17 +665,6 @@ const main = async () => {
       console.log(err);
       throw ERRORS.CANVAS_CAPTURE_FAILED;
     }
-
-    // TEMP - check if WebGPU is available
-    const gpuStatus = await page.evaluate(() => {
-      return navigator.userAgent;
-    });
-    console.log("User agent:", gpuStatus);
-
-    await page.goto("chrome://gpu");
-    const gpuInfo = await page.content();
-    console.log("GPU Info:", gpuInfo.substring(0, 2000));
-    // ------------------------------------------------------------
 
     // EXTRACT FEATURES
     console.log("extracting features...");
